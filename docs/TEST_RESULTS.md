@@ -1,51 +1,36 @@
-# Test Results, Logs & Debugging
+# Tests, logs & debugging
 
-This document summarises the data-quality tests, records the execution logs, and walks
-through a deliberate debugging exercise — covering the **Testing**, **Logging**, and
-**Debugging** parts of the assignment.
+This file covers the testing, logging and debugging parts of the assignment: what I test and
+why, the run logs, the problems I hit, and a worked example of finding and fixing one.
 
----
+## The tests
 
-## 1. Test inventory
+There are 23 tests. I kept the set small on purpose and went for the ones that actually
+protect the Data Vault, instead of testing every column. The plain `not_null` checks on
+metadata like `load_date` add noise without catching much, so I left them out.
 
-The project uses dbt's **built-in generic tests**, the **dbt_utils** package, and one
-**custom singular test**. Tests are defined declaratively in the `_*.yml` files; the
-singular test is a SQL query in `tests/`.
+Most tests are dbt's built-in generic tests declared in the `_*.yml` files. A few come from
+the `dbt_utils` package, and one is a custom SQL test in `tests/`.
 
-A deliberately **curated set of 23 high-value tests** — focused on Data Vault integrity
-(identity, referential integrity, history grain) rather than exhaustively testing every
-column. Low-value metadata `not_null` checks were intentionally omitted to keep the suite
-fast and meaningful.
+What's covered:
 
-| Layer | File | Tests (23 total) |
-|---|---|---|
-| Staging | `models/staging/_staging.yml` | `unique` + `not_null` on each business key (`customer_id`, `product_id`, `order_id`) — early warning before the vault loads — **6** |
-| Raw Vault — hubs | `models/raw_vault/_raw_vault.yml` | `unique`+`not_null` on each hub **primary hash key**; `unique` on each hub **business key** — **6** |
-| Raw Vault — link | `models/raw_vault/_raw_vault.yml` | `unique`+`not_null` on the link hash key; `relationships` from `customer_hk`/`product_hk` to their hubs — **4** |
-| Raw Vault — satellites | `models/raw_vault/_raw_vault.yml` | `dbt_utils.unique_combination_of_columns` (`*_hk` + `load_date`) and a `relationships` test to the parent, on each of the 3 satellites — **6** |
-| Custom | `tests/assert_no_orphan_links.sql` | Asserts **no orphan links** — every link row resolves to an existing customer hub *and* product hub — **1** |
+- **Staging** (`_staging.yml`): `unique` + `not_null` on each business key (`customer_id`,
+  `product_id`, `order_id`). This catches bad keys early, before the vault loads.
+- **Hubs** (`_raw_vault.yml`): `unique` + `not_null` on each hub's hash key, and `unique` on
+  each business key. A hub key has to identify exactly one thing.
+- **Link** (`_raw_vault.yml`): `unique` + `not_null` on the link hash key, plus
+  `relationships` from `customer_hk` and `product_hk` back to their hubs. The link can never
+  point at a hub key that doesn't exist.
+- **Satellites** (`_raw_vault.yml`): `unique_combination_of_columns` on `(*_hk, load_date)`
+  so there's one version per key per load, plus a `relationships` test to the parent.
+- **Custom** (`assert_no_orphan_links.sql`): checks every link row resolves to a real
+  customer hub and product hub. It's the same idea as the relationships tests but in one
+  readable query, and a good template for harder business rules later.
 
-**Test categories and why they matter**
+## Run logs
 
-- **`not_null`** — hash keys and audit columns must always be populated; a null key breaks
-  every downstream join.
-- **`unique`** — a hub/link primary hash key must identify exactly one row (no duplicate
-  business keys leaking in).
-- **`relationships`** — referential integrity: a link/satellite can never point at a hub key
-  that doesn't exist.
-- **`unique_combination_of_columns`** — guards satellite grain: one version per parent key
-  per load (no accidental duplicate history rows).
-- **Custom `assert_no_orphan_links`** — a single readable business-rule test; a template for
-  more complex assertions later.
-
-> **23 tests** total. The exact count and pass/fail appear in the `dbt test` output below.
-
----
-
-## 2. Execution logs
-
-> Paste the dbt Cloud output here after running. Each command also writes detailed logs to
-> `logs/dbt.log` (local) or the run's **Logs** tab in dbt Cloud.
+Paste the dbt Cloud output here after running. dbt also writes full logs to `logs/dbt.log`,
+or the run's Logs tab in dbt Cloud.
 
 ### `dbt deps`
 ```
@@ -54,47 +39,45 @@ fast and meaningful.
 
 ### `dbt seed`
 ```
-<paste output — expect: raw_customers (8), raw_products (6), raw_orders (15)>
+<paste output — expect raw_customers 8, raw_products 6, raw_orders 15>
 ```
 
 ### `dbt run`
 ```
-<paste output — expect: 3 staging views + 6 raw vault tables built, PASS>
+<paste output — expect 3 views + 6 vault tables built, all PASS>
 ```
 
 ### `dbt test`
 ```
-<paste output — expect: all tests PASS>
+<paste output — expect 23 tests, all PASS>
 ```
 
-### `dbt build` (one-shot)
+### `dbt build` (everything in one go)
 ```
-<paste the final summary line, e.g. "Completed successfully ... PASS=NN">
+<paste the final line, e.g. Completed successfully ... PASS=NN>
 ```
 
 ### Lineage graph
-After `dbt docs generate`, click **View Docs** → lineage. Save a screenshot here:
+After `dbt docs generate`, open View Docs and screenshot the lineage view:
 
 `![lineage](lineage.png)`
 
----
+## Problems I hit (and how I fixed them)
 
-## 3. Issues I ran into (and how I fixed them)
+A few things went wrong setting this up. Keeping them here since the brief asks for errors
+encountered, and they're the kind of thing you'd actually run into.
 
-A few things went wrong while getting this running. Keeping them here since the brief asks
-for errors encountered, and they're the kind of thing you'd actually hit.
-
-**1. Snowflake login suddenly stopped working.**
+**1. Snowflake login stopped working.**
 `Test connection` started failing with `390100 (08004): Incorrect username or password`,
-even though it had worked 30 min earlier. Turned out my Snowflake account had been
-temporarily locked (too many attempts). Once it was unlocked the same credentials connected
-fine, so nothing in dbt actually needed changing.
+even though it had worked half an hour earlier. My account had been temporarily locked from
+too many attempts. Once it was unlocked the same credentials worked, so nothing in dbt
+needed changing.
 
 **2. `dbt seed` failed before loading anything.**
-Got a pile of `DbtYamlValidationError (dbt1159)` errors pointing at `_raw_vault.yml`. The
-dbt version here is the 2.0 / Fusion preview, which no longer accepts the old test syntax
-where `to`, `field` and `combination_of_columns` sit at the top level. Fix was to nest them
-under an `arguments:` key, e.g.
+A batch of `DbtYamlValidationError (dbt1159)` errors pointing at `_raw_vault.yml`. This dbt
+version is the 2.0 / Fusion preview, which no longer accepts the old test syntax where `to`,
+`field` and `combination_of_columns` sit at the top level. The fix was to nest them under an
+`arguments:` key:
 
 ```yaml
 - relationships:
@@ -103,66 +86,56 @@ under an `arguments:` key, e.g.
       field: customer_hk
 ```
 
-Worth knowing that dbt parses every `.yml` first, so this broke `dbt seed` even though seeds
+dbt parses every `.yml` before running anything, so this broke `dbt seed` even though seeds
 have nothing to do with those tests.
 
 **3. 11 tests failed with `370001` internal errors.**
-These weren't real failures. A genuine `not_null` failure tells you `Got N results`, but
-these said `Snowflake 370001 (08004): Internal error`, only hit a random subset of tests,
-and each one sat there for 90+ seconds on tiny 8-row tables. That's a warehouse problem, not
-a data one. The queries were queueing on a shared warehouse with 6 threads. Re-running and
-using a dedicated XS warehouse cleared it.
+These weren't real failures. A real `not_null` failure says `Got N results`, but these said
+`Snowflake 370001 (08004): Internal error`, only hit a random handful of tests, and each one
+took 90+ seconds on tiny 8-row tables. That's a warehouse problem, not a data one. The
+queries were queueing on a shared warehouse with 6 threads. Re-running on a dedicated XS
+warehouse cleared it.
 
----
+## A worked debugging example
 
-## 4. Debugging walkthrough (deliberate break → diagnose → fix)
+To show the workflow end to end, here's a problem I introduced on purpose, then found and
+fixed using the logs.
 
+**Break it.** Add a duplicate customer to `seeds/raw_customers.csv`:
 
-
-### Step 1 — Introduce a defect
-Add a duplicate customer business key to `seeds/raw_customers.csv`:
 ```diff
  8,Sophia,Wilson,sophia.w@example.com,Germany,2023-08-30
 +8,Sophia,Wilson,sophia.w@example.com,Germany,2023-08-30
 ```
-Re-run:
-```bash
-dbt seed --full-refresh && dbt build
-```
 
-### Step 2 — Observe the failure
-`dbt build` fails on the customer hub's uniqueness test, with output similar to:
+Then `dbt seed --full-refresh && dbt build`.
+
+**See it fail.** The build fails on the hub's uniqueness test:
+
 ```
-Failure in test unique_hub_customer_customer_hk (models/raw_vault/_raw_vault.yml)
+Failure in test unique_hub_customer_customer_hk
   Got 1 result, configured to fail if != 0
-  compiled Code at target/compiled/.../unique_hub_customer_customer_hk.sql
 ```
-Two source rows share `customer_id = 8`, so they hash to the same `customer_hk`, and the hub
-now has a duplicate primary key.
 
-### Step 3 — Diagnose
-Run the compiled failing query (dbt prints its path) to see the offending key:
+Two rows share `customer_id = 8`, so they hash to the same `customer_hk`, and the hub now has
+a duplicate key.
+
+**Find it.** Run the failing check against the table to see the offender:
+
 ```sql
 select customer_hk, count(*)
-from <DEV_SCHEMA>.hub_customer
+from <dev_schema>.hub_customer
 group by 1 having count(*) > 1;
 ```
-Returns the hash for `customer_id = 8` with `count = 2` → confirms a duplicate business key
-in the source.
 
-### Step 4 — Fix & verify
-Remove the duplicate row from the CSV and re-run:
-```bash
-dbt seed --full-refresh && dbt build
-```
-All tests return to **PASS**. The `unique` test did exactly its job: it stopped bad data from
-silently corrupting the vault.
+It returns the hash for `customer_id = 8` with a count of 2, confirming a duplicate key in
+the source.
 
-> Takeaway: tests are the safety net. The fix wasn't in SQL logic — the test correctly
-> surfaced a **data** problem at the source, which is where it was resolved.
+**Fix it.** Remove the duplicate row and re-run. Everything goes back to PASS. The test did
+its job: it caught a data problem at the source, which is where it gets fixed, not in the SQL.
 
-### Other useful debugging commands
-- `dbt compile -s <model>` → inspect the generated SQL in `target/compiled/...`
-- `dbt run -s <model> --debug` → verbose logs incl. the exact warehouse query
-- `dbt test -s <model>` → run just one model's tests
-- `dbt run -s +<model>` / `<model>+` → run a model with all its parents / children
+### Handy debugging commands
+- `dbt compile -s <model>` — see the generated SQL in `target/compiled/`
+- `dbt run -s <model> --debug` — verbose logs with the exact query sent to Snowflake
+- `dbt test -s <model>` — run just one model's tests
+- `dbt run -s +<model>` / `<model>+` — build a model with its parents / children
