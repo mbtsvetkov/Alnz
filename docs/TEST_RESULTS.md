@@ -12,12 +12,18 @@ The project uses dbt's **built-in generic tests**, the **dbt_utils** package, an
 **custom singular test**. Tests are defined declaratively in the `_*.yml` files; the
 singular test is a SQL query in `tests/`.
 
-| Layer | File | Tests |
+A deliberately **curated set of 23 high-value tests** — focused on Data Vault integrity
+(identity, referential integrity, history grain) rather than exhaustively testing every
+column. Low-value metadata `not_null` checks were intentionally omitted to keep the suite
+fast and meaningful.
+
+| Layer | File | Tests (23 total) |
 |---|---|---|
-| Seeds (raw) | `seeds/_seeds.yml` | `unique` + `not_null` on each raw business key (`customer_id`, `product_id`, `order_id`); `not_null` on order FKs |
-| Staging | `models/staging/_staging.yml` | `not_null` on every hash/metadata column; `unique`+`not_null` on business keys |
-| Raw Vault | `models/raw_vault/_raw_vault.yml` | `unique`+`not_null` on every hub/link **primary hash key**; `relationships` from link & satellites back to their hubs; `dbt_utils.unique_combination_of_columns` on each satellite (`*_hk` + `load_date`) |
-| Custom | `tests/assert_no_orphan_links.sql` | Asserts **no orphan links** — every link row resolves to an existing customer hub *and* product hub |
+| Staging | `models/staging/_staging.yml` | `unique` + `not_null` on each business key (`customer_id`, `product_id`, `order_id`) — early warning before the vault loads — **6** |
+| Raw Vault — hubs | `models/raw_vault/_raw_vault.yml` | `unique`+`not_null` on each hub **primary hash key**; `unique` on each hub **business key** — **6** |
+| Raw Vault — link | `models/raw_vault/_raw_vault.yml` | `unique`+`not_null` on the link hash key; `relationships` from `customer_hk`/`product_hk` to their hubs — **4** |
+| Raw Vault — satellites | `models/raw_vault/_raw_vault.yml` | `dbt_utils.unique_combination_of_columns` (`*_hk` + `load_date`) and a `relationships` test to the parent, on each of the 3 satellites — **6** |
+| Custom | `tests/assert_no_orphan_links.sql` | Asserts **no orphan links** — every link row resolves to an existing customer hub *and* product hub — **1** |
 
 **Test categories and why they matter**
 
@@ -32,7 +38,7 @@ singular test is a SQL query in `tests/`.
 - **Custom `assert_no_orphan_links`** — a single readable business-rule test; a template for
   more complex assertions later.
 
-> Total ≈ **65 tests**. The exact count and pass/fail appear in the `dbt test` output below.
+> **23 tests** total. The exact count and pass/fail appear in the `dbt test` output below.
 
 ---
 

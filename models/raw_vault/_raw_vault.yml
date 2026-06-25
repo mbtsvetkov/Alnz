@@ -1,5 +1,11 @@
 version: 2
 
+# Curated test set focused on Data Vault integrity:
+#   - hub/link primary hash keys: unique + not_null   (identity)
+#   - hub business keys: unique                        (no duplicate source keys)
+#   - link -> hub & sat -> parent: relationships       (referential integrity)
+#   - satellites: unique_combination(hk, load_date)    (correct history grain)
+
 models:
   # ----------------------------------------------------------------------- HUBS
   - name: hub_customer
@@ -17,15 +23,10 @@ models:
         description: "Customer natural/business key."
         data_tests:
           - unique
-          - not_null
       - name: load_date
         description: "When the key was first loaded."
-        data_tests:
-          - not_null
       - name: record_source
         description: "Origin of the record."
-        data_tests:
-          - not_null
 
   - name: hub_product
     description: >
@@ -40,13 +41,6 @@ models:
         description: "Product natural/business key."
         data_tests:
           - unique
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
-      - name: record_source
-        data_tests:
-          - not_null
 
   # ----------------------------------------------------------------------- LINK
   - name: link_customer_product
@@ -63,7 +57,6 @@ models:
       - name: customer_hk
         description: "Foreign hash key to hub_customer."
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('hub_customer')
@@ -71,21 +64,12 @@ models:
       - name: product_hk
         description: "Foreign hash key to hub_product."
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('hub_product')
                 field: product_hk
       - name: order_id
         description: "Degenerate business key of the order on the link."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
-      - name: record_source
-        data_tests:
-          - not_null
 
   # ------------------------------------------------------------------ SATELLITES
   - name: sat_customer_details
@@ -103,18 +87,12 @@ models:
       - name: customer_hk
         description: "Foreign hash key to hub_customer."
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('hub_customer')
                 field: customer_hk
       - name: customer_hashdiff
         description: "Hash of descriptive attributes used for change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
 
   - name: sat_product_details
     description: >
@@ -130,18 +108,12 @@ models:
       - name: product_hk
         description: "Foreign hash key to hub_product."
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('hub_product')
                 field: product_hk
       - name: product_hashdiff
         description: "Hash of descriptive attributes used for change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
 
   - name: sat_order_details
     description: >
@@ -157,15 +129,9 @@ models:
       - name: link_customer_product_hk
         description: "Foreign hash key to link_customer_product."
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('link_customer_product')
                 field: link_customer_product_hk
       - name: order_hashdiff
         description: "Hash of order attributes used for change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null

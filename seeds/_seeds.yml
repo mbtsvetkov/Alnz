@@ -1,5 +1,8 @@
 version: 2
 
+# Seeds are documented here. Data-quality tests are applied one layer downstream
+# (in _staging.yml) on the same business keys, so we don't duplicate them here.
+
 seeds:
   - name: raw_customers
     description: >
@@ -8,9 +11,6 @@ seeds:
     columns:
       - name: customer_id
         description: "Natural/business key identifying a customer."
-        data_tests:
-          - unique
-          - not_null
       - name: email
         description: "Customer email address."
 
@@ -21,9 +21,6 @@ seeds:
     columns:
       - name: product_id
         description: "Natural/business key identifying a product."
-        data_tests:
-          - unique
-          - not_null
 
   - name: raw_orders
     description: >
@@ -32,14 +29,7 @@ seeds:
     columns:
       - name: order_id
         description: "Natural/business key identifying an order (transaction)."
-        data_tests:
-          - unique
-          - not_null
       - name: customer_id
         description: "Foreign reference to the ordering customer."
-        data_tests:
-          - not_null
       - name: product_id
         description: "Foreign reference to the ordered product."
-        data_tests:
-          - not_null

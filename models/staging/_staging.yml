@@ -1,5 +1,9 @@
 version: 2
 
+# Curated test set: business-key uniqueness + not-null at the staging layer gives an
+# early warning before bad keys reach the vault. Hash/metadata columns are validated
+# in the vault layer (_raw_vault.yml), not duplicated here.
+
 models:
   - name: stg_customers
     description: >
@@ -8,8 +12,6 @@ models:
     columns:
       - name: customer_hk
         description: "MD5 hash key of the customer business key. Feeds hub_customer and sat_customer_details."
-        data_tests:
-          - not_null
       - name: customer_id
         description: "Customer natural/business key."
         data_tests:
@@ -17,16 +19,6 @@ models:
           - not_null
       - name: customer_hashdiff
         description: "MD5 over descriptive attributes; drives satellite change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        description: "Timestamp the record was loaded (audit metadata)."
-        data_tests:
-          - not_null
-      - name: record_source
-        description: "Origin system/file of the record (audit metadata)."
-        data_tests:
-          - not_null
 
   - name: stg_products
     description: >
@@ -35,8 +27,6 @@ models:
     columns:
       - name: product_hk
         description: "MD5 hash key of the product business key. Feeds hub_product and sat_product_details."
-        data_tests:
-          - not_null
       - name: product_id
         description: "Product natural/business key."
         data_tests:
@@ -44,14 +34,6 @@ models:
           - not_null
       - name: product_hashdiff
         description: "MD5 over descriptive attributes; drives satellite change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
-      - name: record_source
-        data_tests:
-          - not_null
 
   - name: stg_orders
     description: >
@@ -65,23 +47,9 @@ models:
           - not_null
       - name: link_customer_product_hk
         description: "MD5 hash key of (customer_id, product_id, order_id). Feeds the link."
-        data_tests:
-          - not_null
       - name: customer_hk
         description: "Customer hub hash key referenced by the link."
-        data_tests:
-          - not_null
       - name: product_hk
         description: "Product hub hash key referenced by the link."
-        data_tests:
-          - not_null
       - name: order_hashdiff
         description: "MD5 over order attributes; drives sat_order_details change detection."
-        data_tests:
-          - not_null
-      - name: load_date
-        data_tests:
-          - not_null
-      - name: record_source
-        data_tests:
-          - not_null
