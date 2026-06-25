@@ -79,9 +79,45 @@ After `dbt docs generate`, click **View Docs** → lineage. Save a screenshot he
 
 ---
 
-## 3. Debugging walkthrough (deliberate break → diagnose → fix)
+## 3. Issues I ran into (and how I fixed them)
 
-This demonstrates the debugging workflow required by the brief.
+A few things went wrong while getting this running. Keeping them here since the brief asks
+for errors encountered, and they're the kind of thing you'd actually hit.
+
+**1. Snowflake login suddenly stopped working.**
+`Test connection` started failing with `390100 (08004): Incorrect username or password`,
+even though it had worked 30 min earlier. Turned out my Snowflake account had been
+temporarily locked (too many attempts). Once it was unlocked the same credentials connected
+fine, so nothing in dbt actually needed changing.
+
+**2. `dbt seed` failed before loading anything.**
+Got a pile of `DbtYamlValidationError (dbt1159)` errors pointing at `_raw_vault.yml`. The
+dbt version here is the 2.0 / Fusion preview, which no longer accepts the old test syntax
+where `to`, `field` and `combination_of_columns` sit at the top level. Fix was to nest them
+under an `arguments:` key, e.g.
+
+```yaml
+- relationships:
+    arguments:
+      to: ref('hub_customer')
+      field: customer_hk
+```
+
+Worth knowing that dbt parses every `.yml` first, so this broke `dbt seed` even though seeds
+have nothing to do with those tests.
+
+**3. 11 tests failed with `370001` internal errors.**
+These weren't real failures. A genuine `not_null` failure tells you `Got N results`, but
+these said `Snowflake 370001 (08004): Internal error`, only hit a random subset of tests,
+and each one sat there for 90+ seconds on tiny 8-row tables. That's a warehouse problem, not
+a data one. The queries were queueing on a shared warehouse with 6 threads. Re-running and
+using a dedicated XS warehouse cleared it.
+
+---
+
+## 4. Debugging walkthrough (deliberate break → diagnose → fix)
+
+
 
 ### Step 1 — Introduce a defect
 Add a duplicate customer business key to `seeds/raw_customers.csv`:
