@@ -65,15 +65,17 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('hub_customer')
-              field: customer_hk
+              arguments:
+                to: ref('hub_customer')
+                field: customer_hk
       - name: product_hk
         description: "Foreign hash key to hub_product."
         data_tests:
           - not_null
           - relationships:
-              to: ref('hub_product')
-              field: product_hk
+              arguments:
+                to: ref('hub_product')
+                field: product_hk
       - name: order_id
         description: "Degenerate business key of the order on the link."
         data_tests:
@@ -93,17 +95,19 @@ models:
       per key per load.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - customer_hk
-            - load_date
+          arguments:
+            combination_of_columns:
+              - customer_hk
+              - load_date
     columns:
       - name: customer_hk
         description: "Foreign hash key to hub_customer."
         data_tests:
           - not_null
           - relationships:
-              to: ref('hub_customer')
-              field: customer_hk
+              arguments:
+                to: ref('hub_customer')
+                field: customer_hk
       - name: customer_hashdiff
         description: "Hash of descriptive attributes used for change detection."
         data_tests:
@@ -118,17 +122,19 @@ models:
       insert-only history.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - product_hk
-            - load_date
+          arguments:
+            combination_of_columns:
+              - product_hk
+              - load_date
     columns:
       - name: product_hk
         description: "Foreign hash key to hub_product."
         data_tests:
           - not_null
           - relationships:
-              to: ref('hub_product')
-              field: product_hk
+              arguments:
+                to: ref('hub_product')
+                field: product_hk
       - name: product_hashdiff
         description: "Hash of descriptive attributes used for change detection."
         data_tests:
@@ -143,17 +149,19 @@ models:
       (date, quantity, unit price) with insert-only history.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - link_customer_product_hk
-            - load_date
+          arguments:
+            combination_of_columns:
+              - link_customer_product_hk
+              - load_date
     columns:
       - name: link_customer_product_hk
         description: "Foreign hash key to link_customer_product."
         data_tests:
           - not_null
           - relationships:
-              to: ref('link_customer_product')
-              field: link_customer_product_hk
+              arguments:
+                to: ref('link_customer_product')
+                field: link_customer_product_hk
       - name: order_hashdiff
         description: "Hash of order attributes used for change detection."
         data_tests:
