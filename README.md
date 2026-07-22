@@ -29,8 +29,14 @@ Everything upstream of that is in `models/staging/` (light cleaning and the hash
 the sample data is in `seeds/` as plain CSV files. There are a couple of macros in `macros/`
 that handle the hashing so the same rules are applied everywhere.
 
+On top of the vault, `models/marts/` holds the **public, consumer-facing interface** —
+`dim_customer` (versioned v1/v2), `dim_product` and `fact_orders` — governed by enforced
+**data contracts** (column types, constraints, versioning, access). The quality bar per layer
+and the contract policy are written up in
+[docs/DATA_QUALITY.md](docs/DATA_QUALITY.md).
+
 ```
-seeds/*.csv  ->  dbt seed  ->  raw tables  ->  staging views  ->  hubs / link / satellites
+seeds/*.csv  ->  dbt seed  ->  raw tables  ->  staging views  ->  hubs / link / satellites  ->  marts (contracted)
 ```
 
 The shape of the vault:
@@ -59,10 +65,14 @@ alnz_data_vault/
   models/
     staging/               cleans and standardises the raw data, adds the hashes (views)
     raw_vault/             the hubs, link and satellites (insert-only incremental tables)
+    marts/                 public, contracted dim_/fact_ interface (versioned)
+    exposures.yml          declared downstream consumers (BI dashboard)
   tests/
     assert_no_orphan_links.sql   a custom test for referential integrity
+    assert_test_coverage.sql     the per-layer minimum-bar coverage gate
   docs/
     ARCHITECTURE.md        the concepts, team setup, dev pathway and a YAML guide
+    DATA_QUALITY.md        the data-quality + data-contract framework playbook
     TEST_RESULTS.md        the test list, run logs and a debugging walkthrough
 ```
 
@@ -190,5 +200,8 @@ select * from <dev_schema>.sat_customer_details limit 5;
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains the Data Vault concepts in plain
   terms, suggests how to grow this into a team setup, sketches a learning path for junior and
   mid-level engineers, and walks through how the YAML files are organised.
+- [docs/DATA_QUALITY.md](docs/DATA_QUALITY.md) is the data-quality & data-contract framework:
+  the per-layer minimum test bar, severity conventions, the coverage gate, and the enforced
+  contracts / versioning / access governance on the marts interface.
 - [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md) lists the tests, holds the run logs, and
   includes a short debugging walkthrough where a test is deliberately broken and then fixed.

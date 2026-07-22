@@ -1,0 +1,209 @@
+version: 2
+
+# Access governance: consumers may only ref() a model in a group they're allowed
+# to. The marts_public group owns the public interface and names an accountable owner.
+groups:
+  - name: marts_public
+    owner:
+      name: Analytics Engineering
+      email: analytics@alnz.example
+
+# ---------------------------------------------------------------------------------
+# DATA CONTRACTS (public layer only).
+# contract.enforced + access:public come from dbt_project.yml (marts:). Each model
+# lists every column with a data_type; the build fails if the output shape drifts.
+#
+# Snowflake constraint enforcement (portability — see docs/DATA_QUALITY.md):
+#   not_null                 -> ENFORCED
+#   primary_key / foreign_key -> metadata only (documented, not enforced)
+#   check                    -> NOT supported on Snowflake, so ranges are enforced
+#                               via accepted_range data_tests instead.
+# The relationships/range data_tests below enforce integrity on every adapter.
+# ---------------------------------------------------------------------------------
+models:
+  # ------------------------------------------------------------- dim_customer (versioned)
+  - name: dim_customer
+    description: "Current-state customer dimension. Public, contracted, versioned interface."
+    group: marts_public
+    latest_version: 2
+    columns:
+      - name: customer_hk
+        description: "Hash key of the customer (primary key)."
+        data_type: varchar
+        constraints:
+          - type: primary_key
+          - type: not_null
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Customer business/natural key."
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests:
+          - not_null
+      - name: first_name
+        description: "Customer first name."
+        data_type: varchar
+      - name: last_name
+        description: "Customer last name."
+        data_type: varchar
+      - name: email
+        description: "Contact email."
+        data_type: varchar
+      - name: email_domain
+        description: "Domain portion of the email (added in v2)."
+        data_type: varchar
+      - name: country
+        description: "Customer country."
+        data_type: varchar
+      - name: signup_date
+        description: "Date the customer signed up."
+        data_type: date
+      - name: load_date
+        description: "Load timestamp of the sourced satellite row."
+        data_type: timestamp_ntz
+      - name: record_source
+        description: "Provenance of the record."
+        data_type: varchar
+    versions:
+      # v1 predates email_domain — exclude it so the v1 contract stays stable.
+      # deprecation_date signals consumers to migrate to v2 before it is removed.
+      - v: 1
+        deprecation_date: 2026-12-31
+        columns:
+          - include: all
+            exclude: [email_domain]
+      # v2 (latest) — additive column.
+      - v: 2
+        columns:
+          - include: all
+
+  # ------------------------------------------------------------- dim_product
+  - name: dim_product
+    description: "Current-state product dimension. Public, contracted interface."
+    group: marts_public
+    columns:
+      - name: product_hk
+        description: "Hash key of the product (primary key)."
+        data_type: varchar
+        constraints:
+          - type: primary_key
+          - type: not_null
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        description: "Product business/natural key."
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests:
+          - not_null
+      - name: product_name
+        description: "Product display name."
+        data_type: varchar
+      - name: category
+        description: "Product category (low-cardinality enum)."
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Electronics', 'Accessories']
+      - name: price
+        description: "List price. Non-negative (range check warns, does not block)."
+        data_type: number(10,2)
+        data_tests:
+          - dbt_utils.accepted_range:
+              config:
+                severity: warn
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: load_date
+        description: "Load timestamp of the sourced satellite row."
+        data_type: timestamp_ntz
+      - name: record_source
+        description: "Provenance of the record."
+        data_type: varchar
+
+  # ------------------------------------------------------------- fact_orders
+  - name: fact_orders
+    description: "One row per order with its customer/product keys. Public, contracted interface."
+    group: marts_public
+    columns:
+      - name: link_customer_product_hk
+        description: "Hash key of the order (link) — primary key."
+        data_type: varchar
+        constraints:
+          - type: primary_key
+          - type: not_null
+        data_tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: "Order business/natural key."
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests:
+          - not_null
+      - name: customer_hk
+        description: "FK to dim_customer.customer_hk."
+        data_type: varchar
+        constraints:
+          - type: not_null
+          - type: foreign_key
+            to: ref('dim_customer')
+            to_columns: [customer_hk]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_hk
+      - name: product_hk
+        description: "FK to dim_product.product_hk."
+        data_type: varchar
+        constraints:
+          - type: not_null
+          - type: foreign_key
+            to: ref('dim_product')
+            to_columns: [product_hk]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: product_hk
+      - name: order_date
+        description: "Date the order was placed."
+        data_type: date
+      - name: quantity
+        description: "Units ordered. Must be positive (range check warns)."
+        data_type: number(38,0)
+        data_tests:
+          - dbt_utils.accepted_range:
+              config:
+                severity: warn
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: unit_price
+        description: "Price per unit at time of order."
+        data_type: number(10,2)
+      - name: total_amount
+        description: "Derived: quantity * unit_price. Non-negative (range check warns)."
+        data_type: number(38,2)
+        data_tests:
+          - dbt_utils.accepted_range:
+              config:
+                severity: warn
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: load_date
+        description: "Load timestamp of the sourced satellite row."
+        data_type: timestamp_ntz
+      - name: record_source
+        description: "Provenance of the record."
+        data_type: varchar

@@ -30,6 +30,16 @@ clean-targets:
 # Schema-per-layer (raw / staging / raw_vault) is the production pattern — see
 # docs/ARCHITECTURE.md for how to enable it with +schema configs.
 # ----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
+# Framework toggles (Data Quality & Data Contract Framework — see docs/DATA_QUALITY.md)
+# Advanced/observability tooling is OFF by default so a bare install only needs
+# dbt_utils. Flip a var (and uncomment the package in packages.yml, then `dbt deps`)
+# to activate a tier.
+# ----------------------------------------------------------------------------------
+vars:
+  use_dbt_expectations: false   # richer value/range/regex/distribution assertions
+  use_elementary: false         # anomaly detection + test-result observability
+
 models:
   alnz_data_vault:
     staging:
@@ -37,6 +47,18 @@ models:
     raw_vault:
       +materialized: incremental
       +on_schema_change: append_new_columns
+    # marts = the PUBLIC, consumer-facing interface. Contracts + access governance
+    # apply here only (internal layers above stay flexible). See docs/DATA_QUALITY.md.
+    marts:
+      +materialized: table
+      +access: public
+      +contract:
+        enforced: true
+
+# store_failures lands failing rows in a table for triage (Snowflake + dbt Cloud).
+tests:
+  alnz_data_vault:
+    +store_failures: true
 
 seeds:
   alnz_data_vault:

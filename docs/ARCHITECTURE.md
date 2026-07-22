@@ -29,7 +29,9 @@ changed and you insert a new version. Every row also carries a `load_date` and a
 Where this sits in the bigger picture: sources land in staging, staging feeds the **raw
 vault** (the hubs, links and sats in this project), and on top of that you'd usually build a
 business vault for derived logic and then friendly star-schema marts for reporting. This
-project does staging plus raw vault, which is the foundation everything else stands on.
+project does staging, raw vault, and a thin **marts** layer that is the public, contracted
+interface for consumers — see [DATA_QUALITY.md](DATA_QUALITY.md) for the quality bar per layer
+and the data-contract policy. A business vault would slot in between the two later.
 
 ## Growing this into a team setup
 
@@ -41,7 +43,7 @@ models/
   staging/         one stg_ model per source table, materialized as views
   raw_vault/       hub_ / link_ / sat_ models, insert-only
   business_vault/  (later) derived satellites, point-in-time and bridge tables
-  marts/           (later) fact_ / dim_ models for BI
+  marts/           fact_ / dim_ models for BI — public, contracted, versioned
 ```
 
 The naming prefix tells you what a model is at a glance: `stg_`, `hub_`, `link_`, `sat_`,

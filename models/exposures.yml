@@ -1,0 +1,21 @@
+version: 2
+
+# Declaring downstream consumers makes the contract's blast radius visible:
+#   dbt build -s +exposure:revenue_dashboard   # build everything it depends on
+#   dbt ls    -s +exposure:revenue_dashboard   # see the lineage
+exposures:
+  - name: revenue_dashboard
+    label: "Revenue Dashboard"
+    type: dashboard
+    maturity: high
+    url: https://bi.alnz.example/dashboards/revenue
+    description: >
+      Executive revenue dashboard. Consumes the public marts interface;
+      a breaking change to either contract requires a version bump + consumer notice.
+    depends_on:
+      - ref('fact_orders')
+      - ref('dim_customer')
+      - ref('dim_product')
+    owner:
+      name: Analytics Engineering
+      email: analytics@alnz.example
