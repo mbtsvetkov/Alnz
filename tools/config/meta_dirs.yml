@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------------
+# Scope config for tools/gen_column_meta.py
+#
+# Lists the model folders that get processed (scaffold + config:meta enrichment).
+# Add or remove entries to widen/narrow scope — this is the per-folder control the
+# generator reads (equivalent to the old sources_dir.txt pattern).
+#
+# Each folder is expected to hold one dbt schema file named _<folder>.yml
+# (the repo convention: _staging.yml, _raw_vault.yml, _marts.yml). Scaffolded
+# models are appended to that file; if the folder has none yet, it is created.
+# ---------------------------------------------------------------------------------
+folders:
+  - models/marts
+  - models/staging
+  - models/raw_vault
+
+# Extensible: each entry may later carry per-folder overrides without changing the
+# script contract, e.g.
+#   - path: models/marts
+#     skip_scaffold: true          # enrich only, never create entries here
+#     governance_table: GOVERNANCE.MARTS_DICTIONARY

@@ -1,0 +1,17 @@
+version: 2
+
+# FIXTURE COMMENT: this heading must survive a round-trip untouched.
+models:
+  - name: stg_customers
+    description: >
+      Staging view over raw_customers. Multi-line block scalar that must be preserved.
+    columns:
+      - name: customer_id
+        description: "Customer natural/business key."
+        data_tests:
+          - unique
+          - not_null
+      - name: email
+        description: "Customer email address."
+      - name: undocumented_col
+        description: "No governance row exists for this one."
