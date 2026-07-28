@@ -1,0 +1,137 @@
+version: 2
+
+# Curated test set focused on Data Vault integrity:
+#   - hub/link primary hash keys: unique + not_null   (identity)
+#   - hub business keys: unique                        (no duplicate source keys)
+#   - link -> hub & sat -> parent: relationships       (referential integrity)
+#   - satellites: unique_combination(hk, load_date)    (correct history grain)
+
+models:
+  # ----------------------------------------------------------------------- HUBS
+  - name: hub_customer
+    description: >
+      Data Vault hub for customers. One row per unique customer business key.
+      Holds only the business key, its hash key and audit metadata — no descriptive
+      attributes (those live in sat_customer_details).
+    columns:
+      - name: customer_hk
+        description: "Primary hash key of the customer. Unique and stable."
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Customer natural/business key."
+        data_tests:
+          - unique
+      - name: load_date
+        description: "When the key was first loaded."
+      - name: record_source
+        description: "Origin of the record."
+
+  - name: hub_product
+    description: >
+      Data Vault hub for products. One row per unique product business key.
+    columns:
+      - name: product_hk
+        description: "Primary hash key of the product. Unique and stable."
+        data_tests:
+          - unique
+          - not_null
+      - name: product_id
+        description: "Product natural/business key."
+        data_tests:
+          - unique
+
+  # ----------------------------------------------------------------------- LINK
+  - name: link_customer_product
+    description: >
+      Data Vault link connecting hub_customer and hub_product. Transactional grain:
+      one row per order. Foreign hash keys are tested with `relationships` to guarantee
+      every link points at an existing hub (referential integrity).
+    columns:
+      - name: link_customer_product_hk
+        description: "Primary hash key of the link (hash of customer_id, product_id, order_id)."
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_hk
+        description: "Foreign hash key to hub_customer."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('hub_customer')
+                field: customer_hk
+      - name: product_hk
+        description: "Foreign hash key to hub_product."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('hub_product')
+                field: product_hk
+      - name: order_id
+        description: "Degenerate business key of the order on the link."
+
+  # ------------------------------------------------------------------ SATELLITES
+  - name: sat_customer_details
+    description: >
+      Satellite on hub_customer holding descriptive customer attributes with
+      insert-only history. Uniqueness is on (customer_hk, load_date): one version
+      per key per load.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - customer_hk
+              - load_date
+    columns:
+      - name: customer_hk
+        description: "Foreign hash key to hub_customer."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('hub_customer')
+                field: customer_hk
+      - name: customer_hashdiff
+        description: "Hash of descriptive attributes used for change detection."
+
+  - name: sat_product_details
+    description: >
+      Satellite on hub_product holding descriptive product attributes with
+      insert-only history.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - product_hk
+              - load_date
+    columns:
+      - name: product_hk
+        description: "Foreign hash key to hub_product."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('hub_product')
+                field: product_hk
+      - name: product_hashdiff
+        description: "Hash of descriptive attributes used for change detection."
+
+  - name: sat_order_details
+    description: >
+      Satellite on link_customer_product holding descriptive order attributes
+      (date, quantity, unit price) with insert-only history.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - link_customer_product_hk
+              - load_date
+    columns:
+      - name: link_customer_product_hk
+        description: "Foreign hash key to link_customer_product."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('link_customer_product')
+                field: link_customer_product_hk
+      - name: order_hashdiff
+        description: "Hash of order attributes used for change detection."

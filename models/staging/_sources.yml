@@ -1,0 +1,59 @@
+version: 2
+
+# Sources + freshness — the PRODUCTION pattern for shifting data-quality left to
+# the point of ingestion. In a live deployment staging reads from these raw tables
+# with source(), and CI runs `dbt source freshness` to catch stale loads before
+# anything is modelled.
+#
+# This demo loads the same shape from seeds (see seeds/_seeds.yml) and staging
+# reads them with ref(), so the project builds without a live raw schema. To go
+# live: point staging at source() (one line per stg_ model) and set the database
+# below. `dbt build` never runs freshness, so declaring these sources is safe even
+# while the demo stays on seeds.
+sources:
+  - name: raw
+    description: "Landing zone for raw, un-modelled data loaded by EL tooling."
+    database: "{{ env_var('DBT_RAW_DATABASE', 'RAW') }}"
+    schema: raw
+    # Column carrying each row's load/update timestamp — required for freshness.
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 48, period: hour}
+    tables:
+      - name: raw_customers
+        description: "Raw customer master data. `customer_id` is the natural key."
+        columns:
+          - name: customer_id
+            description: "Natural/business key identifying a customer."
+            data_tests:
+              - not_null
+              - unique
+      - name: raw_products
+        description: "Raw product catalog. `product_id` is the natural key."
+        columns:
+          - name: product_id
+            description: "Natural/business key identifying a product."
+            data_tests:
+              - not_null
+              - unique
+      - name: raw_orders
+        description: "Raw order transactions — drives the customer-product link."
+        # Orders arrive more frequently than master data — tighter freshness.
+        freshness:
+          warn_after: {count: 6, period: hour}
+          error_after: {count: 12, period: hour}
+        columns:
+          - name: order_id
+            description: "Natural/business key identifying an order."
+            data_tests:
+              - not_null
+              - unique
+          - name: customer_id
+            description: "FK to the ordering customer."
+            data_tests:
+              - not_null
+          - name: product_id
+            description: "FK to the ordered product."
+            data_tests:
+              - not_null

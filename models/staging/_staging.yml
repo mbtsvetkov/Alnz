@@ -1,0 +1,55 @@
+version: 2
+
+# Curated test set: business-key uniqueness + not-null at the staging layer gives an
+# early warning before bad keys reach the vault. Hash/metadata columns are validated
+# in the vault layer (_raw_vault.yml), not duplicated here.
+
+models:
+  - name: stg_customers
+    description: >
+      Staging view over raw_customers. Standardises types and attaches the Data Vault
+      hash key (customer_hk) and hashdiff (customer_hashdiff), plus load metadata.
+    columns:
+      - name: customer_hk
+        description: "MD5 hash key of the customer business key. Feeds hub_customer and sat_customer_details."
+      - name: customer_id
+        description: "Customer natural/business key."
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_hashdiff
+        description: "MD5 over descriptive attributes; drives satellite change detection."
+
+  - name: stg_products
+    description: >
+      Staging view over raw_products. Standardises types and attaches product_hk and
+      product_hashdiff, plus load metadata.
+    columns:
+      - name: product_hk
+        description: "MD5 hash key of the product business key. Feeds hub_product and sat_product_details."
+      - name: product_id
+        description: "Product natural/business key."
+        data_tests:
+          - unique
+          - not_null
+      - name: product_hashdiff
+        description: "MD5 over descriptive attributes; drives satellite change detection."
+
+  - name: stg_orders
+    description: >
+      Staging view over raw_orders. Derives the hub hash keys, the transactional
+      link hash key (link_customer_product_hk) and the order satellite hashdiff.
+    columns:
+      - name: order_id
+        description: "Order natural/business key (degenerate key on the link)."
+        data_tests:
+          - unique
+          - not_null
+      - name: link_customer_product_hk
+        description: "MD5 hash key of (customer_id, product_id, order_id). Feeds the link."
+      - name: customer_hk
+        description: "Customer hub hash key referenced by the link."
+      - name: product_hk
+        description: "Product hub hash key referenced by the link."
+      - name: order_hashdiff
+        description: "MD5 over order attributes; drives sat_order_details change detection."

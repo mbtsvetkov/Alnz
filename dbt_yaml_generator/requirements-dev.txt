@@ -1,0 +1,3 @@
+# Dev/test dependencies. Pulls in the runtime deps too.
+-r requirements.txt
+pytest>=8.0,<9.0

@@ -1,0 +1,35 @@
+version: 2
+
+# Seeds are documented here. Data-quality tests are applied one layer downstream
+# (in _staging.yml) on the same business keys, so we don't duplicate them here.
+
+seeds:
+  - name: raw_customers
+    description: >
+      Raw customer master data loaded from CSV into the RAW layer.
+      One row per customer; `customer_id` is the natural business key.
+    columns:
+      - name: customer_id
+        description: "Natural/business key identifying a customer."
+      - name: email
+        description: "Customer email address."
+
+  - name: raw_products
+    description: >
+      Raw product catalog loaded from CSV. One row per product;
+      `product_id` is the natural business key.
+    columns:
+      - name: product_id
+        description: "Natural/business key identifying a product."
+
+  - name: raw_orders
+    description: >
+      Raw order transactions. Each row links a customer to a product at a point
+      in time, and drives the customer-product link in the Data Vault.
+    columns:
+      - name: order_id
+        description: "Natural/business key identifying an order (transaction)."
+      - name: customer_id
+        description: "Foreign reference to the ordering customer."
+      - name: product_id
+        description: "Foreign reference to the ordered product."

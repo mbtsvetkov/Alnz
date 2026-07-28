@@ -1,0 +1,36 @@
+version: 2
+
+# Native unit tests (dbt 2.0 / Fusion) — assert transformation logic from mocked
+# inputs, independent of warehouse data. Reserved for non-trivial mart SQL:
+#   1. fact_orders derives total_amount = quantity * unit_price
+#   2. dim_customer v2 derives email_domain from email
+unit_tests:
+  - name: fact_orders_computes_total_amount
+    description: "total_amount is quantity * unit_price."
+    model: fact_orders
+    given:
+      - input: ref('link_customer_product')
+        rows:
+          - {link_customer_product_hk: 'lk1', order_id: '1001', customer_hk: 'c1', product_hk: 'p1'}
+      - input: ref('sat_order_details')
+        rows:
+          - {link_customer_product_hk: 'lk1', order_date: '2023-09-01', quantity: 3, unit_price: 25.00, load_date: '2023-09-01 00:00:00', record_source: 'seed.raw_orders'}
+    expect:
+      rows:
+        - {link_customer_product_hk: 'lk1', quantity: 3, unit_price: 25.00, total_amount: 75.00}
+
+  - name: dim_customer_v2_derives_email_domain
+    description: "email_domain is the part of email after the '@'."
+    model: dim_customer
+    versions:
+      include: [2]
+    given:
+      - input: ref('hub_customer')
+        rows:
+          - {customer_hk: 'c1', customer_id: '1'}
+      - input: ref('sat_customer_details')
+        rows:
+          - {customer_hk: 'c1', first_name: 'John', last_name: 'Smith', email: 'john.smith@example.com', country: 'USA', signup_date: '2023-01-15', load_date: '2023-01-15 00:00:00', record_source: 'seed.raw_customers'}
+    expect:
+      rows:
+        - {customer_hk: 'c1', email: 'john.smith@example.com', email_domain: 'example.com'}
