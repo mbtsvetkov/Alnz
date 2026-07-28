@@ -1,4 +1,0 @@
-# Runtime dependencies for tools/gen_column_meta.py
-# Pinned to a lower bound; tested against these versions.
-ruamel.yaml>=0.18,<0.19
-snowflake-connector-python>=3.7,<4.0
