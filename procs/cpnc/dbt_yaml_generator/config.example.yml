@@ -1,0 +1,74 @@
+# =====================================================================================
+# dbt_yaml_generator config.  Copy this file to  config.yml  and edit for your project.
+# config.yml is gitignored so your local settings never travel in the zip.
+#
+# All `folders` are RELATIVE TO THE dbt PROJECT ROOT (the dir with dbt_project.yml),
+# which the tool auto-detects. So the package works wherever it is dropped.
+# =====================================================================================
+
+# 1. Parent folders scanned RECURSIVELY for .sql models that need a <model>.yml.
+folders:
+  - models
+
+# 2. Source: how the inventory is read and how its headers map to YAML fields.
+source:
+  default: excel               # `--source` on the CLI overrides this
+  excel:
+    # Optional default path; --excel-path overrides. Env var EXCEL_PATH also honored.
+    path: ""
+    sheet: Sheet1              # the tab holding the prev_/cpnc_ headers (see README)
+    header_row: 1              # 1-based row index of the header row
+  snowflake:
+    # Only used with --source snowflake. Reuses your SNOWFLAKE_* env vars (see README).
+    table: GOVERNANCE.COLUMN_INVENTORY
+    # Optional: when a column's data_type is still blank after the inventory and its
+    # data_type_fallback header, look up the real type from this target's
+    # INFORMATION_SCHEMA.COLUMNS (reuses the same SNOWFLAKE_* env vars — schema is
+    # derived from the model's folder, database from SNOWFLAKE_DATABASE). OFF by
+    # default — this is the only feature that talks to Snowflake even when
+    # --source excel is used. Can also be forced on with --fill-types-from-snowflake.
+    fill_missing_data_types: false
+
+  # CPNC SIDE ONLY — the cpnc_ columns are authoritative. Edit if your headers differ.
+  mapping:
+    model_name:  cpnc_model_name
+    column_name: cpnc_column_name
+    description: cpnc_column_description
+    data_type:   cpnc_data_type
+
+  # Raw source data types -> dbt data_type strings (case-insensitive match on the raw value).
+  type_normalization:
+    TEXT: VARCHAR
+    VARCHAR: VARCHAR
+    TIMESTAMP_NTZ: TIMESTAMP_NTZ
+    TIMESTAMP: TIMESTAMP
+    NUMBER: NUMBER
+    FLOAT: FLOAT
+    DECIMAL: FLOAT
+    BOOLEAN: BOOLEAN
+    DATE: DATE
+
+  # Optional: when the mapped data_type cell is blank, borrow from this header instead.
+  # OFF by default to honor "cpnc-only". Uncomment to enable.
+  # data_type_fallback: prev_data_type
+
+# 3. Fields written under each column's  config: meta:.  ADD A LINE to extend meta.
+#    type: string  -> value or ""      type: boolean -> true/yes/1/y else false
+meta_fields:
+  - {key: business_name,       source: business_name,       type: string}
+  - {key: business_definition, source: business_definition, type: string}
+  - {key: pii,                 source: pii,                 type: boolean}
+  # - {key: remark,        source: remark,        type: string}
+  # - {key: test,          source: Test,          type: string}
+  # - {key: investigation, source: investication, type: string}
+
+# 4. Model-level config written per folder (longest matching prefix wins).
+#    Keep contract.enforced OFF until data_type is populated for every column.
+folder_defaults:
+  models:
+    materialized: view
+  # models/bnl_bvlt:
+  #   schema: bnl_bvlt
+  #   materialized: incremental
+  #   on_schema_change: fail
+  #   contract: {enforced: true}

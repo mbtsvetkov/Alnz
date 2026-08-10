@@ -1,0 +1,5 @@
+# Runtime dependencies (install into your existing dbt venv).
+ruamel.yaml>=0.18,<0.19
+openpyxl>=3.1,<4.0
+# Needed ONLY for `--source snowflake`; harmless to install, or add later:
+# snowflake-connector-python>=3.7,<4.0

@@ -1,0 +1,9 @@
+# Local, per-machine, or secret files — never travel in the zip / never committed.
+.venv/
+.venv*/
+config.yml
+*.env
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
