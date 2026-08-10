@@ -97,26 +97,20 @@ model's output shape: dbt compares the compiled SQL to the declared `columns:` +
 **fails the build if they drift**. That is a governance decision per model, so it is kept out of
 normal generation entirely: **no `contract` key is written or removed unless you pass a flag.**
 
-The decision comes from a **model-level sheet** in the same workbook — one row per model, e.g.
-the `inventory_overview` tab, whose flag column says yes or no:
+A contract is switched on in **four possible places**. Only the first two are this flow: (1) the
+CLI flag decides *whether the pass runs at all*, (2) the sheet cell decides *per model*,
+(3) `config.yml` says *where to look*, and (4) two older paths can still do it folder-wide.
 
-| # | model_name | schema | path | … | status | Is_Data_Contract_Enabled |
-|---|---|---|---|---|---|---|
-| 1 | `bv_cim_load_date` | `bnl_bvlt` | `bnl_bvlt/cim3` | … | pending | `TRUE` |
-| 2 | `bv_cpnc_load_date` | `bnl_cpnc` | `bnl_cpnc` | … | pending | `FALSE` |
+### 1. CLI — which pass runs
 
-Configure the sheet in `config.yml` (all names are yours to change):
-```yaml
-contracts:
-  sheet: inventory_overview
-  header_row: 1
-  model_column: model_name
-  flag_column: Is_Data_Contract_Enabled
-  path_column: path        # optional; tells apart same-named models in two schemas
-  # excel_path: ""         # optional; only if the flags live in another workbook
-```
+| Flag | Effect |
+|---|---|
+| *(none)* | `config.contract` is never written or removed |
+| `--apply-data-contracts` | normal generation (columns, descriptions, meta, folder defaults) **plus** the contract flag |
+| `--contracts-only` | contract flag **only** — implies the above; no column inventory is read, no Snowflake connection, no folder defaults applied |
+| `--contracts-sheet <name>` | read the flag from a different tab this run (sheet name only — column names still come from config) |
 
-Then run it — the flag is the *only* thing these two modes have in common:
+Combines with the existing `--dry-run`, `--excel-path`, `--config` and `--project-dir`:
 ```powershell
 # generate columns/meta as usual AND apply the contract flag
 python procs\cpnc\run_yaml_generator.py --apply-data-contracts --dry-run
@@ -130,7 +124,30 @@ python procs\cpnc\run_yaml_generator.py --contracts-only
 python procs\cpnc\run_yaml_generator.py --contracts-only --contracts-sheet data_contracts
 ```
 
-What gets written, per model:
+One limitation: the flag is **always read from Excel**, even under `--source snowflake`. That
+option governs the *column* inventory only — there is no Snowflake-table equivalent for the flag.
+
+### 2. The sheet cell — what counts as enabled
+
+The decision comes from a **model-level sheet** in the same workbook — one row per model, e.g.
+the `inventory_overview` tab, whose flag column says yes or no:
+
+| # | model_name | schema | path | … | status | Is_Data_Contract_Enabled |
+|---|---|---|---|---|---|---|
+| 1 | `bv_cim_load_date` | `bnl_bvlt` | `bnl_bvlt/cim3` | … | pending | `TRUE` |
+| 2 | `bv_cpnc_load_date` | `bnl_cpnc` | `bnl_cpnc` | … | pending | `FALSE` |
+
+Values are matched case-insensitively and trimmed:
+
+| Written in the flag cell | Result |
+|---|---|
+| Excel `TRUE` boolean, `true`, `yes`, `y`, `t`, `1`, any non-zero number | `enforced: true` |
+| Excel `FALSE` boolean, `false`, `no`, `n`, `f`, `0` | `enforced: false` |
+| empty cell | `enforced: false` — counted as "flag blank" in the summary |
+| anything else (`maybe`, `TBD`, …) | `enforced: false` — listed as an unrecognised value |
+| model not on the sheet at all | nothing written, nothing removed |
+
+What lands in the `<model>.yml`:
 ```yaml
 models:
   - name: bv_cim_load_date
@@ -140,16 +157,38 @@ models:
         enforced: true          # or false — both are written explicitly
 ```
 
-Rules:
-- **True and false are both explicit.** A blank flag cell counts as `false` (and is reported, so
-  "nobody decided yet" is visible). An unrecognised value (`maybe`, …) is also `false` and is
-  listed in the summary.
-- **Models absent from the sheet are left completely alone** — no key added, none removed.
+### 3. `config.yml` — where the flag is looked up
+
+```yaml
+contracts:
+  sheet: inventory_overview              # tab name        (--contracts-sheet overrides)
+  header_row: 1                          # 1-based header row
+  model_column: model_name               # required
+  flag_column: Is_Data_Contract_Enabled  # required
+  path_column: path                      # optional; tells apart same-named models in two schemas
+  # excel_path: ""                       # optional; only if the flags live in another workbook
+```
+
+Only `model_column` and `flag_column` are mandatory — `sheet` defaults to `inventory_overview`
+and `header_row` to `1`. Passing a contract flag with no `contracts:` section at all gives a
+`ConfigError` naming exactly what to add. A wrong sheet or column name fails the same way, listing
+the sheets / headers actually found in the workbook.
+
+### 4. The two paths that bypass this flow
+
+- **`folder_defaults` in `config.yml`** — still functional, but contracts a *whole folder* with no
+  per-model control. If both are set you get a warning and **the sheet wins per model** (it is
+  applied after the folder overlay).
+- **`dbt_project.yml`** — `+contract: {enforced: true}` on a folder. Pure dbt, nothing to do with
+  this generator; a per-model `config:` in the `.yml` overrides it.
+
+There is no env var and no per-model list in `config.yml` — the sheet is the single source for
+per-model decisions.
+
+### Rules the flow follows
 - **`enforced` only.** Per-column `constraints:`, `versions:`, `access:` and `data_tests:` stay
   hand-authored, exactly as [DATA_GOVERNANCE_CONCEPTS.md](../../../docs/DATA_GOVERNANCE_CONCEPTS.md)
   prescribes. Everything already in `config:` is preserved.
-- **The sheet beats `folder_defaults`.** If both set a contract you get a warning and the sheet
-  wins per model.
 - **`--contracts-only` never scaffolds.** A contract needs a `columns:` list, so a model with no
   `<model>.yml` yet is reported and skipped, not created.
 - **Blank `data_type` is a warning, not a block.** A contracted model whose columns lack types is
