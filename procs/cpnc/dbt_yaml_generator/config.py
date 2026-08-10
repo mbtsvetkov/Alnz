@@ -112,6 +112,11 @@ class Config:
     def folder_defaults(self):
         return self._data.get("folder_defaults") or {}
 
+    @property
+    def contracts(self):
+        """Optional `contracts:` section — only read by the independent contracts flow."""
+        return self._data.get("contracts") or {}
+
     def defaults_for(self, folder_relpath):
         """Longest-prefix folder_defaults match for a model's folder (posix-style)."""
         rel = folder_relpath.replace("\\", "/").rstrip("/")

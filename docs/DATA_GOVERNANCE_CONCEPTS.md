@@ -52,6 +52,8 @@ models:
         enforced: true
 ```
 
+Or decide it **per model** rather than per folder: the [dbt_yaml_generator](../procs/cpnc/dbt_yaml_generator/) reads an `Is_Data_Contract_Enabled` flag from a model-level sheet of the inventory workbook and writes `config: contract: {enforced: true|false}` into each `<model>.yml`. It is a deliberately separate flow — `--apply-data-contracts` alongside normal generation, or `--contracts-only` to touch nothing but that key — so contracts are never enabled as a side effect of regenerating columns.
+
 Then declare each model's shape in [models/marts/_marts.yml](../models/marts/_marts.yml). Note `data_type` on every column and the `constraints:` block:
 
 ```yaml
@@ -207,7 +209,7 @@ Use `data_tests:` (not `tests:`), and put generic-test parameters under `argumen
 - **`access:`** — one of `public` (any model, including other projects, may `ref()` it), `protected` (default — only models in the same project), or `private` (only models in the same **group**).
 - **`groups:`** — a named group with an accountable `owner`. Marking internal models `private` + assigning them to a group stops anything outside that group from depending on them.
 - **Exposures** — declare downstream consumers (a dashboard, a report) so a model's *blast radius* is visible in the lineage even though the consumer lives outside dbt.
-- **`config.meta`** — adjacent descriptive metadata (e.g. a `pii: true` flag, business definitions). Not access control, but the "who/what" often lives here; the [dbt_yaml_generator](../dbt_yaml_generator/) can scaffold it.
+- **`config.meta`** — adjacent descriptive metadata (e.g. a `pii: true` flag, business definitions). Not access control, but the "who/what" often lives here; the [dbt_yaml_generator](../procs/cpnc/dbt_yaml_generator/) can scaffold it.
 
 ### In YAML
 
@@ -268,4 +270,4 @@ The typical pattern: **public + contracted marts** as the consumer-facing interf
 | [models/exposures.yml](../models/exposures.yml) | Downstream consumers (dashboards, reports) for blast-radius visibility |
 | [tests/](../tests/)`*.sql` | Singular (custom SQL) tests |
 
-**Generated vs hand-authored.** The [dbt_yaml_generator](../dbt_yaml_generator/) package can scaffold the `columns:`, `data_type:`, and `config.meta:` portions of a model's YAML from a column inventory. The governance pieces — `access`, `group`, `constraints`, `data_tests`, `versions` — are authored by hand, so you stay in control of what promises each model makes.
+**Generated vs hand-authored.** The [dbt_yaml_generator](../procs/cpnc/dbt_yaml_generator/) package can scaffold the `columns:`, `data_type:`, and `config.meta:` portions of a model's YAML from a column inventory. It can also switch `contract.enforced` on or off **per model**, driven by a flag column on a model-level sheet of the same inventory workbook — an independent flow, off unless you run it with `--apply-data-contracts` (alongside normal generation) or `--contracts-only` (the contract key and nothing else). The remaining governance pieces — `access`, `group`, `constraints`, `data_tests`, `versions` — are authored by hand, so you stay in control of what promises each model makes.

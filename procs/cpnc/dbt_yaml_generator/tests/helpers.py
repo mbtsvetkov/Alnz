@@ -43,11 +43,56 @@ ROWS = [
 ]
 
 
-def row_to_list(row):
-    return [row.get(h, "") for h in HEADERS]
+# --- contracts sheet: ONE ROW PER MODEL (the inventory_overview shape) ----------------
+CONTRACT_HEADERS = [
+    "#", "model_name", "schema", "path", "reference", "description(cpnc AI generated)",
+    "where_conditions", "status", "remark", "Is_Data_Contract_Enabled",
+]
+
+CONTRACT_ROWS = [
+    # in the project tree, real boolean TRUE
+    {"#": 1, "model_name": "bv_cpnc_load_date", "schema": "bnl_cpnc", "path": "bnl_cpnc",
+     "status": "pending", "Is_Data_Contract_Enabled": True},
+    # in the project tree, text FALSE
+    {"#": 2, "model_name": "bv_cpnc_ref_parameter_mapping", "schema": "bnl_cpnc",
+     "path": "bnl_cpnc", "status": "pending", "Is_Data_Contract_Enabled": "FALSE"},
+    # no .sql in the tree -> reported, never written
+    {"#": 3, "model_name": "bv_cim_load_date", "schema": "bnl_bvlt",
+     "path": "bnl_bvlt/cim3", "Is_Data_Contract_Enabled": "yes"},
+    {"#": 4, "model_name": "bv_cim_no_decision", "schema": "bnl_bvlt",
+     "path": "bnl_bvlt/cim3", "Is_Data_Contract_Enabled": ""},        # blank -> false
+    {"#": 5, "model_name": "bv_cim_odd_flag", "schema": "bnl_bvlt",
+     "path": "bnl_bvlt/cim3", "Is_Data_Contract_Enabled": "maybe"},   # unrecognised -> false
+    # same model name in two schemas, disagreeing -> told apart by path
+    {"#": 6, "model_name": "bv_cpnc_dual", "schema": "bnl_bvlt",
+     "path": "bnl_bvlt/cim3", "Is_Data_Contract_Enabled": True},
+    {"#": 6, "model_name": "bv_cpnc_dual", "schema": "bnl_cpnc",
+     "path": "bnl_cpnc", "Is_Data_Contract_Enabled": False},
+    # same model name, disagreeing, one path missing -> conflict, left untouched
+    {"#": 7, "model_name": "bv_cpnc_clash", "path": "bnl_bvlt",
+     "Is_Data_Contract_Enabled": True},
+    {"#": 7, "model_name": "bv_cpnc_clash", "path": "", "Is_Data_Contract_Enabled": False},
+    # blank model_name -> skipped
+    {"#": 8, "model_name": "", "path": "bnl_cpnc", "Is_Data_Contract_Enabled": True},
+    # duplicate that AGREES with row 1 -> counted, collapses
+    {"#": 9, "model_name": "bv_cpnc_load_date", "schema": "bnl_cpnc", "path": "bnl_cpnc",
+     "Is_Data_Contract_Enabled": "y"},
+]
+
+CONTRACTS_CFG = {
+    "sheet": "inventory_overview",
+    "header_row": 1,
+    "model_column": "model_name",
+    "flag_column": "Is_Data_Contract_Enabled",
+    "path_column": "path",
+}
 
 
-def make_config(extra_meta=False, fallback=False):
+def row_to_list(row, headers=None):
+    return [row.get(h, "") for h in (headers or HEADERS)]
+
+
+def make_config(extra_meta=False, fallback=False, contracts=True):
     meta_fields = [
         {"key": "business_name", "source": "business_name", "type": "string"},
         {"key": "business_definition", "source": "business_definition", "type": "string"},
@@ -78,6 +123,10 @@ def make_config(extra_meta=False, fallback=False):
         "meta_fields": meta_fields,
         "folder_defaults": {"models": {"materialized": "view"}},
     }
+    if contracts:
+        data["contracts"] = dict(CONTRACTS_CFG)
+        if isinstance(contracts, dict):      # per-test overrides
+            data["contracts"].update(contracts)
     return Config(data, "test-config")
 
 
@@ -99,6 +148,12 @@ def write_config_yml(root, path):
         "  - {key: pii, source: pii, type: boolean}\n"
         "folder_defaults:\n"
         "  models/bnl_bvlt: {materialized: incremental}\n"
+        "contracts:\n"
+        "  sheet: inventory_overview\n"
+        "  header_row: 1\n"
+        "  model_column: model_name\n"
+        "  flag_column: Is_Data_Contract_Enabled\n"
+        "  path_column: path\n"
     )
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)

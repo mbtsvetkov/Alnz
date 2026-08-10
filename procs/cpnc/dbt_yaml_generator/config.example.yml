@@ -63,7 +63,8 @@ meta_fields:
   # - {key: investigation, source: investication, type: string}
 
 # 4. Model-level config written per folder (longest matching prefix wins).
-#    Keep contract.enforced OFF until data_type is populated for every column.
+#    Do NOT set contract here — it would enforce a whole folder wholesale. Use the
+#    per-model contracts sheet in section 5 instead (it wins over anything set here).
 folder_defaults:
   models:
     materialized: view
@@ -71,4 +72,21 @@ folder_defaults:
   #   schema: bnl_bvlt
   #   materialized: incremental
   #   on_schema_change: fail
-  #   contract: {enforced: true}
+
+# 5. DATA CONTRACTS — INDEPENDENT FLOW. Nothing here takes effect unless you pass
+#    --apply-data-contracts (on top of a normal run) or --contracts-only (contract key
+#    and nothing else). One row per MODEL, not per column — by default the same workbook
+#    as the column inventory. TRUE/FALSE both get written explicitly; a blank flag is
+#    written as false; models absent from the sheet are left completely untouched.
+#
+#    Only `config.contract.enforced` is generated. Per-column `constraints:`, `versions:`,
+#    `access:` and `data_tests:` stay hand-authored — see docs/DATA_GOVERNANCE_CONCEPTS.md.
+#    On Snowflake, `not_null` is enforced, primary_key/foreign_key are metadata only and
+#    `check` is unsupported; contract DRIFT detection works regardless of the warehouse.
+contracts:
+  sheet: inventory_overview            # the model-level governance tab
+  header_row: 1                        # 1-based
+  model_column: model_name
+  flag_column: Is_Data_Contract_Enabled
+  path_column: path                    # optional; tells apart same-named models in two schemas
+  # excel_path: ""                     # optional; only if the flags live in another workbook

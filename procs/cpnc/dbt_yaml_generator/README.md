@@ -4,7 +4,9 @@ Generate **one dbt schema file per model** (`<model>.yml`, next to the `.sql`) f
 **column-inventory source** — a local Excel export now (SharePoint-synced), a Snowflake table
 later. Each column gets `description`, `data_type`, and a `config: meta:` block
 (`business_name`, `business_definition`, `pii`, … — extensible). Model-level `config`
-(`schema`/`materialized`/`contract`/…) comes from per-folder defaults.
+(`schema`/`materialized`/…) comes from per-folder defaults, and **data contracts** are switched
+on per model from a separate sheet by a separate flag — see
+[Data contracts (independent flow)](#data-contracts-independent-flow).
 
 This is a **self-contained, drop-in package**: zip the folder, unzip into any dbt project,
 configure, run.
@@ -52,8 +54,10 @@ Edit `config.yml`:
 - **`source.mapping`** — which headers are authoritative. Default = the **`cpnc_` side**.
 - **`meta_fields`** — fields under `config.meta`. Starts with `business_name`,
   `business_definition`, `pii`; add a line to extend (e.g. `remark`).
-- **`folder_defaults`** — model-level config per folder. **Keep `contract.enforced` off until
-  every column has a `data_type`.**
+- **`folder_defaults`** — model-level config per folder. **Don't set `contract` here** — that
+  would contract a whole folder wholesale; use the per-model `contracts` sheet instead.
+- **`contracts`** — the model-level sheet driving `contract.enforced`. Only read when you ask
+  for it; see [Data contracts (independent flow)](#data-contracts-independent-flow).
 
 `config.yml`, `.venv`, and `*.env` are gitignored, so they never travel in the zip.
 
@@ -67,6 +71,8 @@ python procs\cpnc\run_yaml_generator.py --excel-path "...same path..."
 - `--dry-run` prints a unified diff and writes nothing.
 - `--source snowflake` reads a table instead (see below).
 - `--project-dir` overrides the auto-detected project root.
+- `--apply-data-contracts` / `--contracts-only` drive the contract flag (see below). Without
+  them, no `contract` key is ever written or removed.
 - The run prints a summary: files written, `.sql` models with no inventory rows, inventory
   models with no `.sql` (mismatch check), skipped/duplicate/blank-type counts.
 
@@ -79,8 +85,83 @@ Then let dbt consume the result: `dbt parse && dbt docs generate`.
 - **Excel wins, tests kept:** on an existing `<model>.yml`, `description`/`data_type`/`meta` are
   overwritten from the inventory, but per-column `data_tests`/`constraints` and the model
   description are preserved. Columns not in the inventory are kept (and reported).
+- **Contracts are opt-in:** `config.contract` is never touched unless `--apply-data-contracts` or
+  `--contracts-only` is passed.
 - **Empties:** blank string → `""`; blank `pii` (or any boolean) → `false`.
 - **Idempotent:** re-running with an unchanged inventory rewrites nothing.
+
+## Data contracts (independent flow)
+
+A [data contract](../../../docs/DATA_GOVERNANCE_CONCEPTS.md) is an enforced promise about a
+model's output shape: dbt compares the compiled SQL to the declared `columns:` + `data_type:` and
+**fails the build if they drift**. That is a governance decision per model, so it is kept out of
+normal generation entirely: **no `contract` key is written or removed unless you pass a flag.**
+
+The decision comes from a **model-level sheet** in the same workbook — one row per model, e.g.
+the `inventory_overview` tab, whose flag column says yes or no:
+
+| # | model_name | schema | path | … | status | Is_Data_Contract_Enabled |
+|---|---|---|---|---|---|---|
+| 1 | `bv_cim_load_date` | `bnl_bvlt` | `bnl_bvlt/cim3` | … | pending | `TRUE` |
+| 2 | `bv_cpnc_load_date` | `bnl_cpnc` | `bnl_cpnc` | … | pending | `FALSE` |
+
+Configure the sheet in `config.yml` (all names are yours to change):
+```yaml
+contracts:
+  sheet: inventory_overview
+  header_row: 1
+  model_column: model_name
+  flag_column: Is_Data_Contract_Enabled
+  path_column: path        # optional; tells apart same-named models in two schemas
+  # excel_path: ""         # optional; only if the flags live in another workbook
+```
+
+Then run it — the flag is the *only* thing these two modes have in common:
+```powershell
+# generate columns/meta as usual AND apply the contract flag
+python procs\cpnc\run_yaml_generator.py --apply-data-contracts --dry-run
+python procs\cpnc\run_yaml_generator.py --apply-data-contracts
+
+# contract key only — descriptions, data_types, meta and folder defaults are NOT touched
+python procs\cpnc\run_yaml_generator.py --contracts-only --dry-run
+python procs\cpnc\run_yaml_generator.py --contracts-only
+
+# read the flag from a differently-named tab for this run
+python procs\cpnc\run_yaml_generator.py --contracts-only --contracts-sheet data_contracts
+```
+
+What gets written, per model:
+```yaml
+models:
+  - name: bv_cim_load_date
+    config:
+      materialized: incremental
+      contract:
+        enforced: true          # or false — both are written explicitly
+```
+
+Rules:
+- **True and false are both explicit.** A blank flag cell counts as `false` (and is reported, so
+  "nobody decided yet" is visible). An unrecognised value (`maybe`, …) is also `false` and is
+  listed in the summary.
+- **Models absent from the sheet are left completely alone** — no key added, none removed.
+- **`enforced` only.** Per-column `constraints:`, `versions:`, `access:` and `data_tests:` stay
+  hand-authored, exactly as [DATA_GOVERNANCE_CONCEPTS.md](../../../docs/DATA_GOVERNANCE_CONCEPTS.md)
+  prescribes. Everything already in `config:` is preserved.
+- **The sheet beats `folder_defaults`.** If both set a contract you get a warning and the sheet
+  wins per model.
+- **`--contracts-only` never scaffolds.** A contract needs a `columns:` list, so a model with no
+  `<model>.yml` yet is reported and skipped, not created.
+- **Blank `data_type` is a warning, not a block.** A contracted model whose columns lack types is
+  still written, with the offending columns listed — `dbt build` will reject it until they're
+  filled, which is the intended feedback loop.
+- **Same model name twice** (e.g. the same view in two schemas) with *disagreeing* flags is
+  resolved via `path_column` against the model's folder; if that can't decide, the model is left
+  untouched and reported as a conflict.
+
+On Snowflake, `not_null` is enforced, `primary_key`/`foreign_key` are metadata only, and `check`
+is unsupported — but contract **drift detection** is a dbt compile-time check and works
+regardless of the warehouse.
 
 ## Data-type backfill from Snowflake (optional)
 

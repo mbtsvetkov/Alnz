@@ -4,6 +4,8 @@ Rules (locked with the user):
   * model-level `config` comes from per-folder defaults (overlaid each run).
   * columns: Excel wins for description / data_type / config.meta; existing
     data_tests / constraints are PRESERVED; columns absent from Excel are kept.
+  * `config.contract.enforced` is written ONLY by the independent contracts flow
+    (see contracts.py) — never as a side effect of normal generation.
   * strings double-quoted; booleans bare; comments/quoting of untouched nodes preserved.
 """
 
@@ -98,9 +100,59 @@ def _overlay_model_config(entry, defaults):
     config = entry.get("config")
     if not isinstance(config, CommentedMap):
         config = CommentedMap()
-        entry["config"] = config
+        _insert_before_columns(entry, "config", config)
     for key, value in _to_commented(defaults).items():
         config[key] = value
+
+
+def find_model_entry(data, model_name):
+    """Return the `models:` entry for a model (case-insensitive match on name), or None."""
+    if not isinstance(data, dict):
+        return None
+    models = data.get("models")
+    if not isinstance(models, list):
+        return None
+    for m in models:
+        if isinstance(m, dict) and str(m.get("name", "")).lower() == str(model_name).lower():
+            return m
+    return None
+
+
+def _insert_before_columns(entry, key, value):
+    """Add a key ahead of `columns` so files keep the name/description/config/columns order."""
+    keys = list(entry.keys())
+    if "columns" in keys:
+        entry.insert(keys.index("columns"), key, value)
+    else:
+        entry[key] = value
+
+
+def apply_contract(entry, enforced):
+    """Set config.contract.enforced on a model entry, preserving every other key.
+
+    Used only by the independent contracts flow; `enforced` is written as a bare bool.
+    """
+    config = entry.get("config")
+    if not isinstance(config, CommentedMap):
+        config = CommentedMap()
+        _insert_before_columns(entry, "config", config)
+    contract = config.get("contract")
+    if not isinstance(contract, CommentedMap):
+        contract = CommentedMap()
+        config["contract"] = contract
+    contract["enforced"] = bool(enforced)
+
+
+def columns_missing_data_type(entry):
+    """Column names on a model entry with no data_type — dbt rejects these under a contract."""
+    columns = entry.get("columns")
+    if not isinstance(columns, list):
+        return []
+    return [
+        str(col["name"]) for col in columns
+        if isinstance(col, dict) and "name" in col
+        and not str(col.get("data_type") or "").strip()
+    ]
 
 
 def build_or_merge(existing_data, model_name, records, defaults):
@@ -121,11 +173,7 @@ def build_or_merge(existing_data, model_name, records, defaults):
             data["models"] = CommentedSeq()
 
     # Locate (or create) the model entry.
-    entry = None
-    for m in data["models"]:
-        if m and str(m.get("name", "")).lower() == model_name.lower():
-            entry = m
-            break
+    entry = find_model_entry(data, model_name)
     if entry is None:
         # Key order: name, description, config, columns (matches the target layout).
         entry = CommentedMap()

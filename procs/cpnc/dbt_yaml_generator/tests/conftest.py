@@ -2,11 +2,14 @@
 
 import pytest
 
-from dbt_yaml_generator.tests.helpers import HEADERS, ROWS, make_config, row_to_list
+from dbt_yaml_generator.tests.helpers import (
+    CONTRACT_HEADERS, CONTRACT_ROWS, HEADERS, ROWS, make_config, row_to_list,
+)
 
 
 @pytest.fixture(scope="session")
 def inventory_xlsx(tmp_path_factory):
+    """The real workbook shape: a per-column sheet plus the per-model contracts sheet."""
     from openpyxl import Workbook
     path = tmp_path_factory.mktemp("xlsx") / "inventory.xlsx"
     wb = Workbook()
@@ -15,6 +18,12 @@ def inventory_xlsx(tmp_path_factory):
     ws.append(HEADERS)
     for row in ROWS:
         ws.append(row_to_list(row))
+
+    overview = wb.create_sheet("inventory_overview")
+    overview.append(CONTRACT_HEADERS)
+    for row in CONTRACT_ROWS:
+        overview.append(row_to_list(row, CONTRACT_HEADERS))
+
     wb.save(str(path))
     return str(path)
 
